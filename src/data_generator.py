@@ -510,5 +510,5 @@ def generate_training_example(x, y):
     prediction = translate_bbox_to_prediction(
         class_bbox, prediction, debug=False)
 
-    print(f"Final canvas shape {canvas.shape}, final prediction shape {prediction.shape}")
+    # print(f"Final canvas shape {canvas.shape}, final prediction shape {prediction.shape}")
     return (canvas, prediction)

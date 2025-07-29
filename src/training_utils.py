@@ -91,7 +91,7 @@ def calculate_best_anchor_boxes(y_true,y_pred):
     print(f"y_pred_boxes.shape {y_pred_box_corners.shape}")
 
     ## calculate the intersection coordinates between ground truth and anchor boxes
-    intersection_box_corners = calculate_intersection_corners(y_true_box_corners[:,:,:,0:4],y_pred_box_corners[:,:,:,0:4])
+    intersection_box_corners = calculate_intersection_corners(y_true_box_corners[:,:,:,0:],y_pred_box_corners[:,:,:,0:])
     print(f"intersection_box_corners.shape {intersection_box_corners.shape}")
     
     ## calculate the IOU
@@ -112,8 +112,10 @@ def calculate_best_anchor_boxes(y_true,y_pred):
     ## select the index with highest iou
     highest_iou_index = tf.argmax(iou, axis=2)
     print(f"highest_iou_index.shape {highest_iou_index.shape}")
-    highest_iou_index = tf.reshape(highest_iou_index, shape=(iou.shape[0],iou.shape[1],-1))
-    print(f"highest_iou_index.shape {highest_iou_index.shape}")
+    
+    highest_iou_index = tf.expand_dims(highest_iou_index, axis=2)
+    # highest_iou_index = tf.reshape(highest_iou_index, shape=(iou.shape[0],iou.shape[1],-1))
+    print(f"expanded highest_iou_index.shape {highest_iou_index.shape}")
     
     ## select the anchor box based on the index
     best_anchor_boxes = tf.gather(selected_anchor_boxes,indices=highest_iou_index, batch_dims=2)
