@@ -73,16 +73,23 @@ def calculate_iou(intersection_area, union_area):
 
 def calculate_grid_cell_indices(y_true, y_pred):
     x_grid_size = y_pred.shape[1]
+    batch_size = y_pred.shape[0]
 
     # Read the bounding box centers
     # Each instance in the bach will have 5 bounding box centers
-    bounding_box_centers = y_true[:, :, 1:3]
+    ## select boxes with objectness equal to 1
+    # objectness_mask = y_true[:, :, 0] == 1.0
+    # bounding_boxes_with_objects = tf.boolean_mask(y_true, mask=objectness_mask)
+    # print(f"bounding_boxes_with_objects.shape : {bounding_boxes_with_objects.shape}")
+    bounding_box_centers = y_true[:,:,1:3]
 
     # TODO:  here we are assuming number of rows and columns in grid is same. Confirm the assumption.
     # The general formula is: grid_index = floor(pixel_coordinate * (grid_size / image_size))
     # convert each 5 bounding box centers to 5 possible grids for each instance
     grid_indices = tf.cast(
         tf.floor(bounding_box_centers * (x_grid_size / 100)), dtype=tf.int32)
+    
+    # grid_indices = tf.reshape(grid_indices,shape=(batch_size,-1,2))
     print(f"grid indices shape {grid_indices.shape}")
 
     return grid_indices
@@ -183,26 +190,34 @@ def calculate_best_anchor_boxes(y_true, y_pred):
 
 
 def calculate_loss(predicted_values, true_values):
+    
+    objectness_mask = true_values[:, :, :, 0] == 1.0
+
+    true_values_with_objects = tf.boolean_mask(true_values, mask=objectness_mask)
+    predicted_values_with_objects = tf.boolean_mask(predicted_values, mask=objectness_mask)
+    
+    print(f"true_values_with_objects.shape : {true_values_with_objects.shape}")
+    print(f"predicted_values_with_objects.shape : {predicted_values_with_objects.shape}")
     # slice the 3 properties that we are tyring to calculate loss against
     # predicted values
 
-    y_pred_objectness = predicted_values[:, :, :, 0]
+    y_pred_objectness = predicted_values_with_objects[:, 0]
     print(f"y_pred_objectness.shape : {y_pred_objectness.shape}")
 
-    y_pred_bounding_box = predicted_values[:, :, :, 1:5]
+    y_pred_bounding_box = predicted_values_with_objects[:, 1:5]
     print(f"y_pred_bounding_box.shape : {y_pred_bounding_box.shape}")
 
-    y_pred_classification = predicted_values[:, :, :, 5:]
+    y_pred_classification = predicted_values_with_objects[:, 5:]
     print(f"y_pred_classification.shape : {y_pred_classification.shape}")
 
     # True Values
-    y_true_objectness = true_values[:, :, :, 0]
+    y_true_objectness = true_values_with_objects[:, 0]
     print(f"y_true_objectness.shape : {y_true_objectness.shape}")
 
-    y_true_bounding_box = true_values[:, :, :, 1:5]
+    y_true_bounding_box = true_values_with_objects[:, 1:5]
     print(f"y_true_bounding_box.shape : {y_true_bounding_box.shape}")
 
-    y_true_classification = true_values[:, :, :, 5:]
+    y_true_classification = true_values_with_objects[:, 5:]
     print(f"y_true_classification.shape : {y_true_classification.shape}")
 
     # Apply activation functions to predicted values
@@ -268,7 +283,11 @@ def calculate_objectless_loss(y_true, y_pred):
         indices=combine_update_index, 
         shape=positive_mask.shape, 
         updates=tf.constant(True, shape=(combine_update_index.shape[0],)))
-    print(f"positive_mask.shape : {positive_mask}")
+
+    
+    
+    masked_values = tf.boolean_mask(tf.reshape(y_pred,shape=(batch_size,6,6,3,-1)),mask=positive_mask)
+    print(f"masked_values.shape : {masked_values.shape}")
     pass
 
 # loss function for the model
