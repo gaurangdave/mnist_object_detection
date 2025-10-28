@@ -1,7 +1,6 @@
 from keras.datasets import mnist
 import tensorflow as tf
-import constants as C
-
+from . import constants as C
 
 # --- THIS IS THE CACHE ---
 # A private, global variable to hold our data
@@ -20,13 +19,13 @@ def get_mnist_data():
     
     # 2. If not, load it
     print("--- Loading and caching MNIST data... ---")
-    (x_train, y_train), _ = mnist.load_data()
+    (x_train, y_train), (x_test, y_test) = mnist.load_data()
     
     # 3. Convert to Tensors and cache
     # (Note: I changed y_train to int32, as labels shouldn't be floats)
     ALL_MNIST_DATA_PIXELS_TF = tf.constant(x_train, dtype=tf.float32)
-    ALL_MNIST_DATA_CLASSES_TF = tf.constant(y_train, dtype=tf.int32)
-    
+    ALL_MNIST_DATA_CLASSES_TF = tf.constant(y_train, dtype=tf.float32)
+        
     _mnist_data_cache = (ALL_MNIST_DATA_PIXELS_TF, ALL_MNIST_DATA_CLASSES_TF)
     
     return _mnist_data_cache
