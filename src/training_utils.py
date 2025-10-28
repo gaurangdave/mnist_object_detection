@@ -86,8 +86,11 @@ def calculate_grid_cell_indices(y_true, y_pred):
     # TODO:  here we are assuming number of rows and columns in grid is same. Confirm the assumption.
     # The general formula is: grid_index = floor(pixel_coordinate * (grid_size / image_size))
     # convert each 5 bounding box centers to 5 possible grids for each instance
+    
+    normalized_grid_size = tf.cast((x_grid_size), dtype=tf.float32)
+    
     grid_indices = tf.cast(
-        tf.floor(bounding_box_centers * (x_grid_size / 100)), dtype=tf.int32)
+        tf.floor(bounding_box_centers * normalized_grid_size), dtype=tf.int32)
 
     # grid_indices = tf.reshape(grid_indices,shape=(batch_size,-1,2))
     print(f"grid indices shape {grid_indices.shape}")
