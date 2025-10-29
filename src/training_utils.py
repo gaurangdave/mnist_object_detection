@@ -253,62 +253,114 @@ def calculate_loss(predicted_values, true_values):
 
 
 def calculate_objectless_loss(y_true, y_pred):
+    """
+        Objectless loss is a bit different from regular loss function and the reason for that is difference in shape between pred and true values. 
+        True value shape will be (m,5,15) and pred shape would be (m,6,6,3,15) or (m,6,6,45)
+        If we have only 2 digits per image total bbox with object in true would 30 and object less would be 45
+        But in prediction object true would be 30 but objectless should be 1590, which is (6 * 6 * 3 * 15) - 30
+        So we need to penalize these 1590 predictions if they have predited these anchor boxes with objects. 
+        To to that we'll create a tensor with zeroes that matches shape of the prediction, and calculate the loss with respect to that. 
+    """
+    
+    
     # step 1: create placeholder y_true
     y_pred_shape = tf.shape(y_pred)
     batch_size = y_pred_shape[0]
+    grid_h = y_pred_shape[1]
+    grid_w = y_pred_shape[2]
+    NUM_ANCHORS = 3
+    NUM_FEATURES = 15 # (1 score + 4 coords + 10 classes)
 
     bounding_box_with_object_mask = y_true[:, :, 0] == 1.0
 
     # step 2: prepare mask for positive values
     # hard coding the grid size
-    positive_mask = tf.constant(False, shape=(batch_size, 6, 6, 3))
+    # default mask with everything false
+    positive_mask_shape = [batch_size, grid_h, grid_w, NUM_ANCHORS]
+    positive_mask = tf.constant(False, shape=positive_mask_shape)
     # tf.print(f"positive_mask.shape {tf.shape(positive_mask)}")
 
+
+    # indices to grid cells that have the objects
     grid_cell_indices = calculate_grid_cell_indices(
         y_true=y_true, y_pred=y_pred)
 
     # grid cell indices will have shape (m, 5, 2)
     # here 5 is max images and 2 is row and column index
-
+    # returns indices of the anchor boxes with highest IOU in given grid cells
     highest_iou_index = calculate_anchorbox_indices(
         y_true=y_true, y_pred=y_pred, grid_cell_indices=grid_cell_indices)
 
-    # highest_iou_index = tf.boolean_mask(
-    #     highest_iou_index, mask=bounding_box_with_object_mask)
-    # tf.print(f"highest_iou_index.shape {tf.shape(highest_iou_index)}")
     # highest iou index will have shpae (m,5,1)
     # here 5 is max images and 1 represents best anchor box in the cell.
-
     # we need to combine both the indices to create tensor of shape (m, row indices, column indices, box index)
+    # create batch index
     combine_update_index = tf.range(batch_size)
     # expand dims
     combine_update_index = tf.reshape(
         combine_update_index, shape=(batch_size, 1, 1))
-    # combine_update_index = tf.expand_dims(combine_update_index, axis=2)
+    
+    # repeat axis 0 1 time, anxis 1 5 times and axis 2 1 time
+    """
+        Understanding tile output
+        if batch size is 3 the combine_update_index tensor would be
+        <tf.Tensor: shape=(3, 1, 1), dtype=int32, numpy=
+        array([[[0]],
+              [[1]],
+              [[2]]], dtype=int32)>
+        After tile operation - repeat axis 0 1 time, anxis 1 5 times and axis 2 1 time
+        <tf.Tensor: shape=(3, 5, 1), dtype=int32, numpy=
+        array([[[0],
+                [0],
+                [0],
+                [0],
+                [0]],
+
+            [[1],
+                [1],
+                [1],
+                [1],
+                [1]],
+
+            [[2],
+                [2],
+                [2],
+                [2],
+                [2]]], dtype=int32)>
+        So all we did here was create a tensor with batch indices.
+    """
     combine_update_index = tf.tile(
         combine_update_index, [1, 5, 1])
+    # concat finally creates a tensor with indices pointing to all the best anchor boxes in cells with objects
     combine_update_index = tf.concat(
         [combine_update_index, grid_cell_indices, highest_iou_index], axis=2)
 
+    # boolean mask filters out all the anchor boxes without object in it since bounding_box_with_object_mask is created using true values
     combine_update_index = tf.boolean_mask(
         combine_update_index, mask=bounding_box_with_object_mask)
     
     combine_update_index_shape = tf.shape(combine_update_index)
     # # tf.print(f"combine_update_index.shape : {combine_update_index_shape}")
 
+    ## set the mask values to true where actual bounding boxes are present
     positive_mask = tf.scatter_nd(
         indices=combine_update_index,
-        shape=tf.shape(positive_mask),
+        shape=positive_mask_shape,
         updates=tf.constant(True, shape=(combine_update_index_shape[0],)))
 
     # select predicted anchor boxes based on negative masked values
     negative_mask = ~positive_mask
     # tf.print(f"negative_mask.shape : {tf.shape(negative_mask)}")
-    objectless_anchorboxes = tf.boolean_mask(tf.reshape(
-        y_pred, shape=(batch_size, 6, 6, 3, -1)), mask=negative_mask)
+    
+    # select all the anchor boxes that are suppose to be object less
+    y_pred_reshaped = tf.reshape(
+        y_pred, shape=(batch_size, grid_h, grid_w, NUM_ANCHORS, NUM_FEATURES))
+    objectless_anchorboxes = tf.boolean_mask(y_pred_reshaped, mask=negative_mask)
     # tf.print(f"masked_values.shape : {tf.shape(objectless_anchorboxes)}")
     
     objectless_anchorboxes_shape = tf.shape(objectless_anchorboxes)
+    # create a fake true tensor that matches the shape with all 0
+    # we'll use this tensor to calculate the object less loss. 
     y_true_objectless = tf.zeros(
         shape=objectless_anchorboxes_shape, dtype=tf.float32)
     # tf.print(f"y_true_objectless.shape {tf.shape(y_true_objectless)}")
@@ -351,8 +403,8 @@ def calculate_model_loss(y_true, y_pred):
 
     # objectless loss calculation
     # tf.print("\n\n----- Calculation Object Less Loss -----")
-    # objectless_loss = calculate_objectless_loss(
-    #     y_true=y_true, y_pred=y_pred)
+    objectless_loss = calculate_objectless_loss(
+        y_true=y_true, y_pred=y_pred)
     
     # # tf.print("\n\n----- Object Less Loss -----")
     # # tf.print(f"objectless_loss : {objectless_loss}")
@@ -364,7 +416,7 @@ def calculate_model_loss(y_true, y_pred):
     lambda_objectless = 1
 
     total_loss = (objectness_loss * lambda_objectness) + (bounding_box_loss *
-                                                          lambda_bounding_box) + (classification_loss * lambda_classification) #+ (objectless_loss * lambda_objectless)
+                                                          lambda_bounding_box) + (classification_loss * lambda_classification) + (objectless_loss * lambda_objectless)
 
     # tf.print(f"\n\nTotal Loss : {total_loss}")
 
