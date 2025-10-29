@@ -72,28 +72,21 @@ def calculate_iou(intersection_area, union_area):
 
 
 def calculate_grid_cell_indices(y_true, y_pred):
-    x_grid_size = tf.shape(y_pred)[1]
+    pred_shape = tf.shape(y_pred)
+    grid_h = tf.cast(pred_shape[1], dtype=tf.float32)
+    grid_w = tf.cast(pred_shape[2], dtype=tf.float32)
 
-
-    # Read the bounding box centers
-    # Each instance in the bach will have 5 bounding box centers
-    # select boxes with objectness equal to 1
-    # objectness_mask = y_true[:, :, 0] == 1.0
-    # bounding_boxes_with_objects = tf.boolean_mask(y_true, mask=objectness_mask)
-    # # tf.print(f"bounding_boxes_with_objects.shape : {bounding_boxes_with_objects.shape}")
-    bounding_box_centers = y_true[:, :, 1:3]
-
-    # TODO:  here we are assuming number of rows and columns in grid is same. Confirm the assumption.
-    # The general formula is: grid_index = floor(pixel_coordinate * (grid_size / image_size))
-    # convert each 5 bounding box centers to 5 possible grids for each instance
+    # y_true[:, :, 1] is x_center
+    # y_true[:, :, 2] is y_center
+    x_center = y_true[:, :, 1]
+    y_center = y_true[:, :, 2]
     
-    normalized_grid_size = tf.cast((x_grid_size), dtype=tf.float32)
-    
-    grid_indices = tf.cast(
-        tf.floor(bounding_box_centers * normalized_grid_size), dtype=tf.int32)
+    # Calculate indices separately
+    grid_x_indices = tf.cast(tf.floor(x_center * grid_w), dtype=tf.int32)
+    grid_y_indices = tf.cast(tf.floor(y_center * grid_h), dtype=tf.int32)
 
-    # grid_indices = tf.reshape(grid_indices,shape=(batch_size,-1,2))
-    # # tf.print(f"grid indices shape {grid_indices.shape}")
+    # tf.gather_nd needs indices in (y, x) order
+    grid_indices = tf.stack([grid_y_indices, grid_x_indices], axis=2) # Shape (b, 5, 2)
 
     return grid_indices
 
@@ -277,7 +270,13 @@ def calculate_objectless_loss(y_true, y_pred):
     # hard coding the grid size
     # default mask with everything false
     positive_mask_shape = [batch_size, grid_h, grid_w, NUM_ANCHORS]
-    positive_mask = tf.constant(False, shape=positive_mask_shape)
+    positive_mask_shape_tensor = tf.stack(
+        [batch_size, grid_h, grid_w, NUM_ANCHORS]
+    )
+    
+    # This is the CORRECT line
+    # tf.fill() runs at runtime and can handle a dynamic shape
+    positive_mask = tf.fill(positive_mask_shape_tensor, False)
     # tf.print(f"positive_mask.shape {tf.shape(positive_mask)}")
 
 
@@ -343,10 +342,12 @@ def calculate_objectless_loss(y_true, y_pred):
     # # tf.print(f"combine_update_index.shape : {combine_update_index_shape}")
 
     ## set the mask values to true where actual bounding boxes are present
+    num_updates = tf.shape(combine_update_index)[0]
+    updates = tf.fill([num_updates], True) # This creates [True, True, ...] at runtime
     positive_mask = tf.scatter_nd(
         indices=combine_update_index,
         shape=positive_mask_shape,
-        updates=tf.constant(True, shape=(combine_update_index_shape[0],)))
+        updates=updates)
 
     # select predicted anchor boxes based on negative masked values
     negative_mask = ~positive_mask
