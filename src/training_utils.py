@@ -1,3 +1,4 @@
+import keras
 import tensorflow as tf
 
 # helper function to convert box values to corner coordinates
@@ -387,7 +388,7 @@ def calculate_objectless_loss(y_true, y_pred):
 
 # loss function for the model
 
-
+@keras.saving.register_keras_serializable()
 def calculate_model_loss(y_true, y_pred):
     # Find best anchor box
     expanded_y_true = tf.expand_dims(y_true, axis=2)
