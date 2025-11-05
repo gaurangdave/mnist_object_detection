@@ -150,9 +150,13 @@ def calculate_tight_bbox(pixels, class_values, padding=1):
     """
     # step 1: calculate active rows and cols
     # active rows will have shape of (m,28) where each 28 pixels represent sum of 28 pixels in the col
+    # here reduce_sum is calculated over axis 2 and 3, which is columns and channels
+    # so for each row it sums up the columns of the row
     active_rows = tf.reduce_sum(pixels, axis=[2, 3])
     # tf.print("----- active_rows shape : ", tf.shape(active_rows))
     # active rows will have shape of (m,28) where each 28 pixels represent sum of 28 pixels in the row
+    # similarly here reduce_sum is calculated over each row and channel
+    # so for each column it sums up the row values of that column
     active_cols = tf.reduce_sum(pixels, axis=[1, 3])
     # tf.print("----- active_cols shape : ", tf.shape(active_cols))
 
@@ -306,19 +310,6 @@ def get_canvas_placement(bbox_info):
     canvas_top = tf.cast(bbox_info[..., C.BBOX_CANVAS_TOP_IDX], dtype=tf.int32)
     canvas_left = tf.cast(bbox_info[..., C.BBOX_CANVAS_LEFT_IDX], dtype=tf.int32)
     return canvas_top, canvas_left
-
-
-# augmentation = tf.keras.Sequential([
-#     tf.keras.layers.RandomTranslation(
-#         height_factor=0.2, width_factor=0.2, fill_value=0.0, fill_mode="constant", seed=42),
-
-#     tf.keras.layers.RandomZoom(
-#         height_factor=0.2, width_factor=0.2, fill_value=0.0, fill_mode="constant", seed=42),
-
-#     tf.keras.layers.RandomRotation(
-#         factor=0.1, fill_value=0.0, fill_mode="constant", seed=42),
-# ])
-
 
 @tf.function
 def augment_digits(pixels):

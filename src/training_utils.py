@@ -418,6 +418,15 @@ def calculate_model_loss(y_true, y_pred):
 
 @keras.saving.register_keras_serializable()
 def calculate_model_loss_dict(y_true, y_pred):
+    """Function to calculate total loss and return values as a dictionary
+
+    Args:
+        y_true (_type_): _description_
+        y_pred (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
     # Find best anchor box
     expanded_y_true = tf.expand_dims(y_true, axis=2)
     best_anchor_boxes = calculate_best_anchor_boxes(y_true, y_pred)
