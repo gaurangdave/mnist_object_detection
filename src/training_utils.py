@@ -81,13 +81,14 @@ def calculate_grid_cell_indices(y_true, y_pred):
     # y_true[:, :, 2] is y_center
     x_center = y_true[:, :, 1]
     y_center = y_true[:, :, 2]
-    
+
     # Calculate indices separately
     grid_x_indices = tf.cast(tf.floor(x_center * grid_w), dtype=tf.int32)
     grid_y_indices = tf.cast(tf.floor(y_center * grid_h), dtype=tf.int32)
 
     # tf.gather_nd needs indices in (y, x) order
-    grid_indices = tf.stack([grid_y_indices, grid_x_indices], axis=2) # Shape (b, 5, 2)
+    grid_indices = tf.stack(
+        [grid_y_indices, grid_x_indices], axis=2)  # Shape (b, 5, 2)
 
     return grid_indices
 
@@ -101,7 +102,7 @@ def calculate_anchorbox_indices(y_true, y_pred, grid_cell_indices):
 
     anchor_boxes = tf.reshape(
         y_pred, shape=(-1, x_grid_size, y_grid_size, 3, 15))
-    
+
     # # tf.print(f"anchor_boxes.shape {tf.shape(anchor_boxes)}")
 
     selected_anchor_boxes = tf.gather_nd(
@@ -153,7 +154,7 @@ def calculate_anchorbox_indices(y_true, y_pred, grid_cell_indices):
 
 
 def calculate_best_anchor_boxes(y_true, y_pred):
-    
+
     y_pred_shape = tf.shape(y_pred)
     x_grid_size = y_pred_shape[1]
     y_grid_size = y_pred_shape[2]
@@ -187,10 +188,9 @@ def calculate_best_anchor_boxes(y_true, y_pred):
 
     return best_anchor_boxes
 
-# helper function to split and calculate loss
-
 
 def calculate_loss(predicted_values, true_values):
+    # helper function to split and calculate loss
 
     objectness_mask = true_values[:, :, :, 0] == 1.0
 
@@ -226,6 +226,7 @@ def calculate_loss(predicted_values, true_values):
 
     # Apply activation functions to predicted values
     y_pred_objectness = tf.keras.activations.sigmoid(y_pred_objectness)
+    y_pred_bounding_box = tf.keras.activations.sigmoid(y_pred_bounding_box)
     # # tf.print(
     #     f"Post Activation y_pred_objectness.shape : {tf.shape(y_pred_objectness)}")
 
@@ -236,8 +237,10 @@ def calculate_loss(predicted_values, true_values):
     # Calculate loss
     objectness_loss = tf.keras.losses.BinaryCrossentropy(
         from_logits=False)(y_true_objectness, y_pred_objectness)
+    
     bounding_box_loss = tf.keras.losses.MeanSquaredError()(
         y_true_bounding_box, y_pred_bounding_box)
+    
     classification_loss = tf.keras.losses.CategoricalCrossentropy()(
         y_true_classification, y_pred_classification)
 
@@ -255,15 +258,14 @@ def calculate_objectless_loss(y_true, y_pred):
         So we need to penalize these 1590 predictions if they have predited these anchor boxes with objects. 
         To to that we'll create a tensor with zeroes that matches shape of the prediction, and calculate the loss with respect to that. 
     """
-    
-    
+
     # step 1: create placeholder y_true
     y_pred_shape = tf.shape(y_pred)
     batch_size = y_pred_shape[0]
     grid_h = y_pred_shape[1]
     grid_w = y_pred_shape[2]
     NUM_ANCHORS = 3
-    NUM_FEATURES = 15 # (1 score + 4 coords + 10 classes)
+    NUM_FEATURES = 15  # (1 score + 4 coords + 10 classes)
 
     bounding_box_with_object_mask = y_true[:, :, 0] == 1.0
 
@@ -274,12 +276,11 @@ def calculate_objectless_loss(y_true, y_pred):
     positive_mask_shape_tensor = tf.stack(
         [batch_size, grid_h, grid_w, NUM_ANCHORS]
     )
-    
+
     # This is the CORRECT line
     # tf.fill() runs at runtime and can handle a dynamic shape
     positive_mask = tf.fill(positive_mask_shape_tensor, False)
     # tf.print(f"positive_mask.shape {tf.shape(positive_mask)}")
-
 
     # indices to grid cells that have the objects
     grid_cell_indices = calculate_grid_cell_indices(
@@ -299,7 +300,7 @@ def calculate_objectless_loss(y_true, y_pred):
     # expand dims
     combine_update_index = tf.reshape(
         combine_update_index, shape=(batch_size, 1, 1))
-    
+
     # repeat axis 0 1 time, anxis 1 5 times and axis 2 1 time
     """
         Understanding tile output
@@ -338,13 +339,14 @@ def calculate_objectless_loss(y_true, y_pred):
     # boolean mask filters out all the anchor boxes without object in it since bounding_box_with_object_mask is created using true values
     combine_update_index = tf.boolean_mask(
         combine_update_index, mask=bounding_box_with_object_mask)
-    
+
     combine_update_index_shape = tf.shape(combine_update_index)
     # # tf.print(f"combine_update_index.shape : {combine_update_index_shape}")
 
-    ## set the mask values to true where actual bounding boxes are present
+    # set the mask values to true where actual bounding boxes are present
     num_updates = tf.shape(combine_update_index)[0]
-    updates = tf.fill([num_updates], True) # This creates [True, True, ...] at runtime
+    # This creates [True, True, ...] at runtime
+    updates = tf.fill([num_updates], True)
     positive_mask = tf.scatter_nd(
         indices=combine_update_index,
         shape=positive_mask_shape,
@@ -353,20 +355,20 @@ def calculate_objectless_loss(y_true, y_pred):
     # select predicted anchor boxes based on negative masked values
     negative_mask = ~positive_mask
     # tf.print(f"negative_mask.shape : {tf.shape(negative_mask)}")
-    
+
     # select all the anchor boxes that are suppose to be object less
     y_pred_reshaped = tf.reshape(
         y_pred, shape=(batch_size, grid_h, grid_w, NUM_ANCHORS, NUM_FEATURES))
-    objectless_anchorboxes = tf.boolean_mask(y_pred_reshaped, mask=negative_mask)
+    objectless_anchorboxes = tf.boolean_mask(
+        y_pred_reshaped, mask=negative_mask)
     # tf.print(f"masked_values.shape : {tf.shape(objectless_anchorboxes)}")
-    
+
     objectless_anchorboxes_shape = tf.shape(objectless_anchorboxes)
     # create a fake true tensor that matches the shape with all 0
-    # we'll use this tensor to calculate the object less loss. 
+    # we'll use this tensor to calculate the object less loss.
     y_true_objectless = tf.zeros(
         shape=objectless_anchorboxes_shape, dtype=tf.float32)
     # tf.print(f"y_true_objectless.shape {tf.shape(y_true_objectless)}")
-
 
     y_pred_objectness = objectless_anchorboxes[:, 0]
     # tf.print(f"y_pred_objectness.shape : {tf.shape(y_pred_objectness)}")
@@ -375,7 +377,6 @@ def calculate_objectless_loss(y_true, y_pred):
     y_true_objectness = y_true_objectless[:, 0]
     # tf.print(f"y_true_objectness.shape : {tf.shape(y_true_objectness)}")
 
-
     # Apply activation functions to predicted values
     y_pred_objectness = tf.keras.activations.sigmoid(y_pred_objectness)
     # tf.print(f"Post Activation y_pred_objectness.shape : {tf.shape(y_pred_objectness)}")
@@ -383,10 +384,11 @@ def calculate_objectless_loss(y_true, y_pred):
     # Calculate loss
     objectless_loss = tf.keras.losses.BinaryCrossentropy(
         from_logits=False)(y_true_objectness, y_pred_objectness)
-    
+
     return objectless_loss
 
 # loss function for the model
+
 
 @keras.saving.register_keras_serializable()
 def calculate_model_loss(y_true, y_pred):
@@ -397,19 +399,10 @@ def calculate_model_loss(y_true, y_pred):
     # Loss Calculation
     objectness_loss, bounding_box_loss, classification_loss = calculate_loss(
         best_anchor_boxes, expanded_y_true)
-    
-    # # tf.print("\n\n----- Localization Loss -----")
-    # # tf.print(f"objectness_loss : {objectness_loss}")
-    # tf.print(f"bounding_box_loss : {bounding_box_loss}")
-    # tf.print(f"classification_loss : {classification_loss}")
 
     # objectless loss calculation
-    # tf.print("\n\n----- Calculation Object Less Loss -----")
     objectless_loss = calculate_objectless_loss(
         y_true=y_true, y_pred=y_pred)
-    
-    # # tf.print("\n\n----- Object Less Loss -----")
-    # # tf.print(f"objectless_loss : {objectless_loss}")
 
     # scale the losses
     lambda_objectness = 1
@@ -420,9 +413,39 @@ def calculate_model_loss(y_true, y_pred):
     total_loss = (objectness_loss * lambda_objectness) + (bounding_box_loss *
                                                           lambda_bounding_box) + (classification_loss * lambda_classification) + (objectless_loss * lambda_objectless)
 
-    # tf.print(f"\n\nTotal Loss : {total_loss}")
-
     return total_loss
+
+
+@keras.saving.register_keras_serializable()
+def calculate_model_loss_dict(y_true, y_pred):
+    # Find best anchor box
+    expanded_y_true = tf.expand_dims(y_true, axis=2)
+    best_anchor_boxes = calculate_best_anchor_boxes(y_true, y_pred)
+
+    # Loss Calculation
+    objectness_loss, bounding_box_loss, classification_loss = calculate_loss(
+        best_anchor_boxes, expanded_y_true)
+
+    # objectless loss calculation
+    objectless_loss = calculate_objectless_loss(
+        y_true=y_true, y_pred=y_pred)
+
+    # scale the losses
+    lambda_objectness = 1
+    lambda_bounding_box = 0.001
+    lambda_classification = 1
+    lambda_objectless = 1
+
+    total_loss = (objectness_loss * lambda_objectness) + (bounding_box_loss *
+                                                          lambda_bounding_box) + (classification_loss * lambda_classification) + (objectless_loss * lambda_objectless)
+
+    return {
+        "loss": total_loss,
+        'objectness_loss': objectness_loss,
+        'bbox_loss': bounding_box_loss,
+        'class_loss': classification_loss,
+        'objectless_loss': objectless_loss
+    }
 
 
 def objectness_metrics(y_true, y_pred):
