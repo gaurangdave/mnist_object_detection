@@ -603,9 +603,6 @@ def _generate_training_example_tf(x, y, num_of_digits):
         class_values = tf.concat(
             [class_values, additional_class_values], axis=0)
 
-        # if debug:
-        # tf.print("----- pixels with additional_digits shape : ", tf.shape(pixels))
-        # tf.print("----- class_values with additional_class_values shape : ", tf.shape(class_values))
 
     # step 2: augment digits
     augmented_pixels = augment_digits(pixels)
