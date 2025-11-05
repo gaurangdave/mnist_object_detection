@@ -237,10 +237,10 @@ def calculate_loss(predicted_values, true_values):
     # Calculate loss
     objectness_loss = tf.keras.losses.BinaryCrossentropy(
         from_logits=False)(y_true_objectness, y_pred_objectness)
-    
+
     bounding_box_loss = tf.keras.losses.MeanSquaredError()(
         y_true_bounding_box, y_pred_bounding_box)
-    
+
     classification_loss = tf.keras.losses.CategoricalCrossentropy()(
         y_true_classification, y_pred_classification)
 
@@ -417,7 +417,7 @@ def calculate_model_loss(y_true, y_pred):
 
 
 @keras.saving.register_keras_serializable()
-def calculate_model_loss_dict(y_true, y_pred):
+def calculate_model_loss_dict(y_true, y_pred, lambdas):
     """Function to calculate total loss and return values as a dictionary
 
     Args:
@@ -440,13 +440,13 @@ def calculate_model_loss_dict(y_true, y_pred):
         y_true=y_true, y_pred=y_pred)
 
     # scale the losses
-    lambda_objectness = 1
-    lambda_bounding_box = 0.001
-    lambda_classification = 1
-    lambda_objectless = 1
+    # lambda_objectness = 1
+    # lambda_bounding_box = 0.001
+    # lambda_classification = 1
+    # lambda_objectless = 1
 
-    total_loss = (objectness_loss * lambda_objectness) + (bounding_box_loss *
-                                                          lambda_bounding_box) + (classification_loss * lambda_classification) + (objectless_loss * lambda_objectless)
+    total_loss = (objectness_loss * lambdas["obj"]) + (bounding_box_loss *
+                                                          lambdas["bbox"]) + (classification_loss * lambdas["class"]) + (objectless_loss * lambdas["obj_less"])
 
     return {
         "loss": total_loss,
