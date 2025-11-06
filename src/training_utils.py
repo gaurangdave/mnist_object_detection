@@ -238,8 +238,9 @@ def calculate_loss(predicted_values, true_values):
     objectness_loss = tf.keras.losses.BinaryCrossentropy(
         from_logits=False)(y_true_objectness, y_pred_objectness)
 
-    bounding_box_loss = tf.keras.losses.MeanSquaredError()(
-        y_true_bounding_box, y_pred_bounding_box)
+    # bounding_box_loss = tf.keras.losses.MeanSquaredError()(
+    #     y_true_bounding_box, y_pred_bounding_box)
+    bounding_box_loss = tf.keras.losses.Huber()(y_true_bounding_box, y_pred_bounding_box)
 
     classification_loss = tf.keras.losses.CategoricalCrossentropy()(
         y_true_classification, y_pred_classification)
