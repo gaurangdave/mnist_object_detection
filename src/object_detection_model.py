@@ -8,15 +8,17 @@ class ObjectDetectionModel(tf.keras.Model):
         self.model = model_architecture
 
         if lambdas is None:
-            self.lambdas = {'bbox': 0.001, 'class': 1.0,
-                            'obj': 1.0, 'obj_less': 1.0}
+            self.lambdas = {"bbox": 0.001, "bbox_coords": 1.0, "bbox_size": 1.0, "class": 1.0,
+                            "obj": 1.0, "obj_less": 1.0
+                            }
         else:
             self.lambdas = lambdas
 
         # Create a tracker for the main loss and each component
         self.total_loss_tracker = tf.keras.metrics.Mean(name="loss")
         self.obj_loss_tracker = tf.keras.metrics.Mean(name="obj_loss")
-        self.bbox_loss_tracker = tf.keras.metrics.Mean(name="bbox_loss")
+        self.bbox_coordinate_loss_tracker = tf.keras.metrics.Mean(name="bbox_coordinate_loss")
+        self.bbox_size_loss_tracker = tf.keras.metrics.Mean(name="bbox_size_loss")
         self.class_loss_tracker = tf.keras.metrics.Mean(name="class_loss")
         self.obj_less_loss_tracker = tf.keras.metrics.Mean(
             name="obj_less_loss")
@@ -73,10 +75,11 @@ class ObjectDetectionModel(tf.keras.Model):
 
         # Update metrics
         self.total_loss_tracker.update_state(total_loss)
-        self.obj_loss_tracker.update_state(loss_dict['objectness_loss'])
-        self.bbox_loss_tracker.update_state(loss_dict['bbox_loss'])
-        self.class_loss_tracker.update_state(loss_dict['class_loss'])
-        self.obj_less_loss_tracker.update_state(loss_dict['objectless_loss'])
+        self.obj_loss_tracker.update_state(loss_dict["objectness_loss"])
+        self.bbox_coordinate_loss_tracker.update_state(loss_dict["bbox_coordinate_loss"])
+        self.bbox_size_loss_tracker.update_state(loss_dict["bbox_size_loss"])
+        self.class_loss_tracker.update_state(loss_dict["class_loss"])
+        self.obj_less_loss_tracker.update_state(loss_dict["objectless_loss"])
 
         # 6. Return the final dict for display
         return {m.name: m.result() for m in self.metrics}
@@ -84,12 +87,13 @@ class ObjectDetectionModel(tf.keras.Model):
     @property
     def metrics(self):
         # List all the trackers Keras should monitor and display.
-        # 'self.compiled_metrics' is the built-in one for the loss
+        # "self.compiled_metrics" is the built-in one for the loss
         # passed to compile().
         return [
             self.total_loss_tracker,
             self.obj_loss_tracker,
-            self.bbox_loss_tracker,
+            self.bbox_coordinate_loss_tracker,
+            self.bbox_size_loss_tracker,
             self.class_loss_tracker,
             self.obj_less_loss_tracker,
         ]

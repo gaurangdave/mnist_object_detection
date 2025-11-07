@@ -206,15 +206,23 @@ def calculate_loss(predicted_values, true_values):
     objectness_loss = tf.keras.losses.BinaryCrossentropy(
         from_logits=False)(y_true_objectness, y_pred_objectness)
 
-    # bounding_box_loss = tf.keras.losses.MeanSquaredError()(
-    #     y_true_bounding_box, y_pred_bounding_box)
-    bounding_box_loss = tf.keras.losses.Huber()(
-        y_true_bounding_box, y_pred_bounding_box)
+    # breaking down bbox loss into bbox_coordinate_loss & bbox_size_loss
+    # bbox_coordinate_loss
+    y_true_coords = y_true_bounding_box[:, :2]
+    y_true_size = y_true_bounding_box[:, 2:]
+    y_pred_coords = y_pred_bounding_box[:, :2]
+    y_pred_size = y_pred_bounding_box[:, 2:]
+
+    bbox_coordinate_loss = tf.keras.losses.Huber()(
+        y_true_coords, y_pred_coords)
+
+    bbox_size_loss = tf.keras.losses.Huber()(
+        y_true_size, y_pred_size)
 
     classification_loss = tf.keras.losses.CategoricalCrossentropy()(
         y_true_classification, y_pred_classification)
 
-    return objectness_loss, bounding_box_loss, classification_loss
+    return objectness_loss, bbox_coordinate_loss, bbox_size_loss, classification_loss
 
 # helper function to calculate loss for object less cells
 
@@ -367,7 +375,7 @@ def calculate_model_loss(y_true, y_pred):
     best_anchor_boxes = calculate_best_anchor_boxes(y_true, y_pred)
 
     # Loss Calculation
-    objectness_loss, bounding_box_loss, classification_loss = calculate_loss(
+    objectness_loss, bbox_coordinate_loss, bbox_size_loss, classification_loss = calculate_loss(
         best_anchor_boxes, expanded_y_true)
 
     # objectless loss calculation
@@ -380,8 +388,9 @@ def calculate_model_loss(y_true, y_pred):
     lambda_classification = 1
     lambda_objectless = 1
 
-    total_loss = (objectness_loss * lambda_objectness) + (bounding_box_loss *
-                                                          lambda_bounding_box) + (classification_loss * lambda_classification) + (objectless_loss * lambda_objectless)
+    total_loss = (objectness_loss * lambda_objectness) + (bbox_coordinate_loss *
+                                                          lambda_bounding_box) + (bbox_size_loss *
+                                                                                  lambda_bounding_box) + (classification_loss * lambda_classification) + (objectless_loss * lambda_objectless)
 
     return total_loss
 
@@ -402,50 +411,52 @@ def calculate_model_loss_dict(y_true, y_pred, lambdas):
     best_anchor_boxes = calculate_best_anchor_boxes(y_true, y_pred)
 
     # Loss Calculation
-    objectness_loss, bounding_box_loss, classification_loss = calculate_loss(
+    objectness_loss, bbox_coordinate_loss, bbox_size_loss, classification_loss = calculate_loss(
         best_anchor_boxes, expanded_y_true)
 
     # objectless loss calculation
     objectless_loss = calculate_objectless_loss(
         y_true=y_true, y_pred=y_pred)
 
-    total_loss = (objectness_loss * lambdas["obj"]) + (bounding_box_loss *
-                                                       lambdas["bbox"]) + (classification_loss * lambdas["class"]) + (objectless_loss * lambdas["obj_less"])
+    total_loss = (objectness_loss * lambdas["obj"]) + (bbox_coordinate_loss *
+                                                       lambdas["bbox_coords"]) + (bbox_size_loss *
+                                                                                  lambdas["bbox_size"]) + (classification_loss * lambdas["class"]) + (objectless_loss * lambdas["obj_less"])
 
     return {
         "loss": total_loss,
         'objectness_loss': objectness_loss,
-        'bbox_loss': bounding_box_loss,
+        'bbox_coordinate_loss': bbox_coordinate_loss,
+        'bbox_size_loss': bbox_size_loss,
         'class_loss': classification_loss,
         'objectless_loss': objectless_loss
     }
 
 
-def objectness_metrics(y_true, y_pred):
-    expanded_y_true = tf.expand_dims(y_true, axis=2)
-    best_anchor_boxes = calculate_best_anchor_boxes(y_true, y_pred)
+# def objectness_metrics(y_true, y_pred):
+#     expanded_y_true = tf.expand_dims(y_true, axis=2)
+#     best_anchor_boxes = calculate_best_anchor_boxes(y_true, y_pred)
 
-    # Loss Calculation
-    objectness_loss, bounding_box_loss, classification_loss = calculate_loss(
-        best_anchor_boxes, expanded_y_true)
-    return objectness_loss
-
-
-def bounding_box_metrics(y_true, y_pred):
-    expanded_y_true = tf.expand_dims(y_true, axis=2)
-    best_anchor_boxes = calculate_best_anchor_boxes(y_true, y_pred)
-
-    # Loss Calculation
-    objectness_loss, bounding_box_loss, classification_loss = calculate_loss(
-        best_anchor_boxes, expanded_y_true)
-    return bounding_box_loss
+#     # Loss Calculation
+#     objectness_loss, bbox_coordinate_loss, bbox_size_loss, classification_loss = calculate_loss(
+#         best_anchor_boxes, expanded_y_true)
+#     return objectness_loss
 
 
-def classification_metrics(y_true, y_pred):
-    expanded_y_true = tf.expand_dims(y_true, axis=2)
-    best_anchor_boxes = calculate_best_anchor_boxes(y_true, y_pred)
+# def bounding_box_metrics(y_true, y_pred):
+#     expanded_y_true = tf.expand_dims(y_true, axis=2)
+#     best_anchor_boxes = calculate_best_anchor_boxes(y_true, y_pred)
 
-    # Loss Calculation
-    objectness_loss, bounding_box_loss, classification_loss = calculate_loss(
-        best_anchor_boxes, expanded_y_true)
-    return classification_loss
+#     # Loss Calculation
+#     objectness_loss, bbox_coordinate_loss, bbox_size_loss, classification_loss = calculate_loss(
+#         best_anchor_boxes, expanded_y_true)
+#     return bounding_box_loss
+
+
+# def classification_metrics(y_true, y_pred):
+#     expanded_y_true = tf.expand_dims(y_true, axis=2)
+#     best_anchor_boxes = calculate_best_anchor_boxes(y_true, y_pred)
+
+#     # Loss Calculation
+#     objectness_loss, bounding_box_loss, classification_loss = calculate_loss(
+#         best_anchor_boxes, expanded_y_true)
+#     return classification_loss
