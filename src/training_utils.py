@@ -433,10 +433,8 @@ def calculate_model_loss_dict(y_true, y_pred, lambdas):
     
 ##### YOLO Methods #####
 
-def calculate_yolo_loss(predicted_values, true_values):
+def calculate_yolo_loss(predicted_values, true_values,grid_dims_tensor):
     # helper function to split and calculate loss using YOLO offset method
-    pred_value_shape = tf.shape(predicted_values)
-
     objectness_mask = true_values[:, :, :, 0] == 1.0
 
     true_values_with_objects = tf.boolean_mask(
@@ -471,7 +469,7 @@ def calculate_yolo_loss(predicted_values, true_values):
     ## scale true coordinates
     ## multiplying normalized true coordinates by grid size gives us grid cell of y_true coordinates
     ## TODO: think of removing the hardcoded grid size
-    y_true_coords_scaled = y_true_coords * 6
+    y_true_coords_scaled = y_true_coords * grid_dims_tensor
     
     ## calculate y_true offset
     ## this will give us % of offset inside the grid cell
@@ -506,13 +504,18 @@ def calculate_yolo_model_loss_dict(y_true, y_pred, lambdas):
     Returns:
         _type_: _description_
     """
+    
+    # get grid size
+    y_pred_shape = tf.shape(y_pred)
+    grid_dims_tensor = tf.cast(tf.stack([(y_pred_shape[1],y_pred_shape[2])]),dtype=tf.float32)
+
     # Find best anchor box
     expanded_y_true = tf.expand_dims(y_true, axis=2)
     best_anchor_boxes = calculate_best_anchor_boxes(y_true, y_pred)
 
     # Loss Calculation
     objectness_loss, bbox_coordinate_loss, bbox_size_loss, classification_loss = calculate_yolo_loss(
-        best_anchor_boxes, expanded_y_true)
+        best_anchor_boxes, expanded_y_true, grid_dims_tensor)
 
     # objectless loss calculation
     objectless_loss = calculate_objectless_loss(
@@ -530,3 +533,36 @@ def calculate_yolo_model_loss_dict(y_true, y_pred, lambdas):
         'class_loss': classification_loss,
         'objectless_loss': objectless_loss
     }
+    
+    
+def get_fresh_base_model(batch_size):
+    """Helper function to get fresh base model to help with experimentation. 
+
+    Returns:
+        _type_: _description_
+    """
+    inputs = tf.keras.Input(shape=(100,100,1),batch_size=batch_size ,name="input_layer")
+
+    x = tf.keras.layers.Rescaling(scale=1./255, name="rescaling")(inputs)
+
+    x = tf.keras.layers.Conv2D(filters=8, kernel_size=5, padding='same', activation='relu')(x)
+    x = tf.keras.layers.Conv2D(filters=8, kernel_size=5, padding='same', activation='relu')(x)
+    x = tf.keras.layers.MaxPooling2D()(x)
+
+    x = tf.keras.layers.Conv2D(filters=8, kernel_size=3, padding='same', activation='relu')(x)
+    x = tf.keras.layers.Conv2D(filters=8, kernel_size=3, padding='same', activation='relu')(x)
+    x = tf.keras.layers.MaxPooling2D()(x)
+
+    x = tf.keras.layers.Conv2D(filters=16, kernel_size=3, padding='same', activation='relu')(x)
+    x = tf.keras.layers.Conv2D(filters=16, kernel_size=3, padding='same', activation='relu')(x)
+    x = tf.keras.layers.MaxPooling2D()(x)
+
+    x = tf.keras.layers.Conv2D(filters=32, kernel_size=3, padding='same', activation='relu')(x)
+    x = tf.keras.layers.Conv2D(filters=32, kernel_size=3, padding='same', activation='relu')(x)
+    x = tf.keras.layers.MaxPooling2D()(x)
+
+    outputs = tf.keras.layers.Conv2D(filters=45, kernel_size=1, padding='same', activation='linear')(x)
+
+    # Define the final model by specifying its inputs and outputs
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    return model
