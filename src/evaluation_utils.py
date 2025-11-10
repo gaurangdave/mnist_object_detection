@@ -35,13 +35,30 @@ data_gen_5_digits = graph_compatible_data_generator.create_data_generator(5)
 data_dir = Path("..", "data")
 models_dir = Path("..", "models")
 
-processed_test_dataset_2 = raw_dataset.map(
-    data_gen_2_digits).batch(batch_size=batch_size).prefetch(tf.data.AUTOTUNE)
 
-# Get one batch of test data to reuse
-for batch in processed_test_dataset_2.take(1):
-    canvas_batch, true_labels_batch = batch
-    break  # Stop after one batch
+def _load_test_data():
+    max_digits = 5
+    test_data = []
+    for num_of_digits in range(1, 5):
+        generator = graph_compatible_data_generator.create_data_generator(
+            num_of_digits=num_of_digits)
+        processed_test_dataset_map = raw_dataset.map(generator).batch(
+            batch_size=batch_size).prefetch(tf.data.AUTOTUNE)
+        for batch in processed_test_dataset_map.take(1):
+            canvas_batch, true_labels_batch = batch
+            test_data.append((canvas_batch, true_labels_batch))
+            break  # Stop after one batch
+    return test_data
+
+
+# processed_test_dataset_2 = raw_dataset.map(
+#     data_gen_2_digits).batch(batch_size=batch_size).prefetch(tf.data.AUTOTUNE)
+
+# # Get one batch of test data to reuse
+# for batch in processed_test_dataset_2.take(1):
+#     canvas_batch, true_labels_batch = batch
+#     break  # Stop after one batch
+test_data = _load_test_data()
 
 
 def get_width_height_from_bbox(bbox):
@@ -77,7 +94,7 @@ def get_min_coor_from_bbox(bbox):
     return x_min, y_min
 
 
-def visualize_comparison(experiment_results, image_index=0):
+def _visualize_comparison(canvas_batch, true_labels_batch, experiment_results, image_index=0):
     """
     Generates a side-by-side comparison for a single image 
     across multiple experiment results.
@@ -213,7 +230,7 @@ def visualize_comparison(experiment_results, image_index=0):
     plt.show()
 
 
-def get_predictions(model_names):
+def _get_predictions(model_names, canvas_batch):
     prediction_list = []
     # Get Predictions
     custom_objects = {
@@ -238,7 +255,7 @@ def get_predictions(model_names):
     return prediction_list
 
 
-def post_process(prediction_list):
+def _post_process(prediction_list):
     post_processed_predictions = []
     for experiment_name, prediction in prediction_list:
         # post process data
@@ -249,3 +266,24 @@ def post_process(prediction_list):
         post_processed_predictions.append(
             (experiment_name, post_processed_data))
     return post_processed_predictions
+
+
+def visualize_model_predictions(model_names, num_of_digits=2, num_of_samples=3):
+    # TODO Validate number of digits should be between 1 and 4 inclusive
+    canvas_batch, true_labels_batch = test_data[num_of_digits - 1]
+    prediction_list = _get_predictions(
+        model_names=model_names, canvas_batch=canvas_batch)
+    post_processed_predictions = _post_process(prediction_list=prediction_list)
+
+    for _ in range(num_of_samples):
+        image_index = np.random.randint(0, 32)
+        _visualize_comparison(
+                            canvas_batch=canvas_batch, 
+                            true_labels_batch=true_labels_batch, 
+                            experiment_results=post_processed_predictions, 
+                            image_index=image_index
+                        )
+
+
+def compare_model_predictions():
+    pass
