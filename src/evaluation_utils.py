@@ -39,7 +39,7 @@ models_dir = Path("..", "models")
 def _load_test_data():
     max_digits = 5
     test_data = []
-    for num_of_digits in range(1, 5):
+    for num_of_digits in range(1, max_digits + 1):
         generator = graph_compatible_data_generator.create_data_generator(
             num_of_digits=num_of_digits)
         processed_test_dataset_map = raw_dataset.map(generator).batch(
